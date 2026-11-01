@@ -5,3 +5,7 @@ test_tmp/
 .pytest_cache/
 .vscode/
 .idea/
+build/
+dist/
+*.spec
+

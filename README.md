@@ -26,7 +26,17 @@
 
 ---
 
-## 🚀 快速開始
+## 📥 下載獨立執行檔 (免安裝 Python)
+
+若您的電腦未安裝 Python 環境，可直接從 GitHub Releases 下載單一執行檔：
+
+👉 **[下載最新版 SnippingOCR.exe (v1.0.0)](https://github.com/okokkook1/snipping-ocr-tool/releases/latest/download/SnippingOCR.exe)**
+
+下載後直接雙擊 `SnippingOCR.exe` 即可立即執行，內建完整 RapidOCR 模型與 OpenCC 繁體中文轉換核心，支援 100% 離線運作。
+
+---
+
+## 🚀 快速開始 (源碼執行)
 
 ### 1. 安裝相依套件
 在命令提示字元 (cmd) 或 PowerShell 中執行：
