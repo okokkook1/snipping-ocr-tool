@@ -26,13 +26,18 @@
 
 ---
 
-## 📥 下載獨立執行檔 (免安裝 Python)
+## 📥 下載離線版本 (免安裝 Python)
 
-若您的電腦未安裝 Python 環境，可直接從 GitHub Releases 下載單一執行檔：
+若您的電腦未安裝 Python 環境，可直接從 GitHub Releases 下載打包好的版本：
 
-👉 **[下載最新版 SnippingOCR.exe (v1.0.0)](https://github.com/okokkook1/snipping-ocr-tool/releases/latest/download/SnippingOCR.exe)**
+### 🌟 推薦：離線免安裝壓縮檔（極速秒開版）
+👉 **[下載最新版 SnippingOCR-portable-windows-x64.zip](https://github.com/okokkook1/snipping-ocr-tool/releases/latest/download/SnippingOCR-portable-windows-x64.zip)**
+- **特點**：預先解開所有模型與相依庫，解壓縮至任意資料夾後，雙擊 `SnippingOCR.exe` 即可**極速秒開**，沒有單一執行檔每次啟動的解壓延遲。
+- 完整包含 RapidOCR 離線模型與 OpenCC 繁體中文轉換核心，100% 離線運作。
 
-下載後直接雙擊 `SnippingOCR.exe` 即可立即執行，內建完整 RapidOCR 模型與 OpenCC 繁體中文轉換核心，支援 100% 離線運作。
+### 📦 單一獨立執行檔版
+👉 **[下載 SnippingOCR.exe](https://github.com/okokkook1/snipping-ocr-tool/releases/download/v1.0.0/SnippingOCR.exe)**
+- **特點**：單一檔案攜帶方便，但因每次啟動需在背景動態解壓 100MB 模組至暫存區，初次啟動時間較長（約需數秒）。
 
 ---
 
