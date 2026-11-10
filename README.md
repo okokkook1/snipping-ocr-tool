@@ -4,7 +4,7 @@ Windows x64 桌面工具。拖曳框選畫面後，可在本機離線辨識中�
 
 ## Windows x64 下載
 
-[下載 Rust 免安裝版](https://github.com/okokkook1/snipping-ocr-tool/releases/download/v2.0.0/snipping-ocr-rust-windows-x64.zip)。完整解壓後雙擊 `SnippingOCR.exe`，並保留同一資料夾內的執行期資源。
+[下載 Rust 免安裝版](https://github.com/okokkook1/snipping-ocr-tool/releases/download/v2.0.1/snipping-ocr-rust-windows-x64.zip)。完整解壓後雙擊 `SnippingOCR.exe`，並保留同一資料夾內的執行期資源。
 
 - **F2** 或 **Ctrl+N** 開始框選，**Esc** 取消。
 - 預設將辨識文字轉成繁體中文，可在介面切換。

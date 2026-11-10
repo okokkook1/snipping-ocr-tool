@@ -17,6 +17,15 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 from PIL import Image, ImageTk, ImageGrab
 
+BACKGROUND = "#f1f5f9"
+SURFACE = "#ffffff"
+INK = "#1e293b"
+MUTED = "#475569"
+BORDER = "#cbd5e1"
+ACCENT = "#1d4ed8"
+SELECTED = "#dbeafe"
+FONT = "Microsoft JhengHei UI"
+
 # 嘗試設置 Windows DPI 感知，避免高解析度螢幕截圖縮放位移
 try:
     import ctypes
@@ -184,19 +193,10 @@ class SnippingOCRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("剪取與 OCR 辨識工具 (繁體中文版)")
-        self.root.geometry("900x640")
-        self.root.minsize(720, 500)
-
-        # 設定風格與繁體字型
-        self.style = ttk.Style()
-        try:
-            self.style.theme_use("clam")
-        except Exception:
-            pass
-
-        # 設定整體介面字型為微軟正黑體 (Microsoft JhengHei UI)
-        default_font = ("Microsoft JhengHei UI", 10)
-        self.root.option_add("*Font", default_font)
+        self.root.geometry("940x660")
+        self.root.minsize(760, 510)
+        self.root.option_add("*Font", (FONT, 10))
+        self._setup_style()
 
         self.ocr_engine = None
         self.current_image = None
@@ -209,6 +209,28 @@ class SnippingOCRApp:
         # 註冊快速鍵
         self.root.bind("<Control-n>", lambda e: self.start_snipping())
         self.root.bind("<F2>", lambda e: self.start_snipping())
+
+    def _setup_style(self):
+        self.root.configure(background=BACKGROUND)
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure("TFrame", background=BACKGROUND)
+        style.configure("Surface.TFrame", background=SURFACE)
+        style.configure("TLabel", background=BACKGROUND, foreground=INK, font=(FONT, 10))
+        style.configure("Title.TLabel", background=SURFACE, font=(FONT, 19, "bold"))
+        style.configure("Section.TLabel", font=(FONT, 12, "bold"))
+        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("Status.TLabel", background=SURFACE, foreground=MUTED)
+        style.configure("TButton", background=SURFACE, foreground=INK, bordercolor=BORDER,
+                        font=(FONT, 10), padding=(12, 8))
+        style.map("TButton", background=[("disabled", BACKGROUND), ("pressed", SELECTED), ("active", "#eff6ff")],
+                  foreground=[("disabled", "#64748b")])
+        style.configure("Accent.TButton", background=ACCENT, foreground=SURFACE, bordercolor=ACCENT,
+                        font=(FONT, 10, "bold"), padding=(16, 10))
+        style.map("Accent.TButton",
+                  background=[("disabled", BACKGROUND), ("pressed", "#1e3a8a"), ("active", "#1e40af")])
+        style.configure("TCheckbutton", background=SURFACE, foreground=INK, font=(FONT, 10), padding=(6, 8))
+        style.map("TCheckbutton", background=[("active", "#eff6ff")])
 
     def _init_ocr_engine(self):
         """背景非同步初始化 OCR 引擎，不卡頓啟動"""
@@ -226,69 +248,65 @@ class SnippingOCRApp:
         threading.Thread(target=load_worker, daemon=True).start()
 
     def _init_ui(self):
-        # 頂部工具列
-        toolbar = ttk.Frame(self.root, padding=6)
-        toolbar.pack(side=tk.TOP, fill=tk.X)
+        header = ttk.Frame(self.root, style="Surface.TFrame", padding=(20, 14))
+        header.pack(fill=tk.X)
+        ttk.Label(header, text="螢幕剪取與文字辨識", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(header, text="拖曳框選畫面上的文字，再編輯、複製或儲存辨識結果。",
+                  style="Status.TLabel").pack(anchor=tk.W, pady=(3, 0))
+        toolbar = ttk.Frame(header, style="Surface.TFrame")
+        toolbar.pack(fill=tk.X, pady=(12, 0))
+        self.btn_snip = ttk.Button(toolbar, text="開始框選  (F2)", style="Accent.TButton",
+                                   command=self.start_snipping)
+        self.btn_snip.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Checkbutton(toolbar, text="自動轉為繁體中文", variable=self.var_traditional,
+                        command=self._on_toggle_traditional).pack(side=tk.LEFT)
 
-        self.btn_snip = ttk.Button(toolbar, text="✂️ 開始框選 (F2)", command=self.start_snipping)
-        self.btn_snip.pack(side=tk.LEFT, padx=4)
+        status_bar = ttk.Frame(self.root, style="Surface.TFrame", padding=(20, 12))
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        self.lbl_status = ttk.Label(status_bar, text="正在初始化 OCR 引擎…", style="Status.TLabel")
+        self.lbl_status.pack(fill=tk.X)
+        self.lbl_status.bind("<Configure>", lambda event: self.lbl_status.configure(wraplength=event.width))
 
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
+        paned = tk.PanedWindow(self.root, orient=tk.HORIZONTAL, sashwidth=9, background=BACKGROUND,
+                               borderwidth=0, relief=tk.FLAT)
+        paned.pack(fill=tk.BOTH, expand=True, padx=20, pady=14)
+        left_frame = ttk.Frame(paned, width=240, padding=(0, 0, 8, 0))
+        paned.add(left_frame, minsize=160, stretch="never")
+        ttk.Label(left_frame, text="截圖預覽", style="Section.TLabel").pack(anchor=tk.W, pady=(0, 8))
+        self.preview_canvas = tk.Canvas(left_frame, width=1, height=1, background=SURFACE,
+                                        highlightthickness=1, highlightbackground=BORDER)
+        self.preview_canvas.pack(fill=tk.BOTH, expand=True)
+        self.preview_canvas.bind("<Configure>", self._update_preview)
+        left_frame.pack_propagate(False)
 
-        self.btn_save_txt = ttk.Button(toolbar, text="💾 另存為 .txt", command=self.save_as_txt)
-        self.btn_save_txt.pack(side=tk.LEFT, padx=4)
+        right_frame = ttk.Frame(paned, padding=(8, 0, 0, 0))
+        result_header = ttk.Frame(right_frame)
+        result_header.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(result_header, text="辨識結果", style="Section.TLabel").pack(side=tk.LEFT)
+        self.lbl_count = ttk.Label(result_header, text="0 字", style="Muted.TLabel")
+        self.lbl_count.pack(side=tk.LEFT, padx=10)
 
-        self.btn_save_odt = ttk.Button(toolbar, text="📄 另存為 .odt", command=self.save_as_odt)
-        self.btn_save_odt.pack(side=tk.LEFT, padx=4)
-
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
-
-        self.btn_copy = ttk.Button(toolbar, text="📋 複製文字", command=self.copy_text)
-        self.btn_copy.pack(side=tk.LEFT, padx=4)
-
-        self.btn_clear = ttk.Button(toolbar, text="🧹 清空內容", command=self.clear_all)
-        self.btn_clear.pack(side=tk.LEFT, padx=4)
-
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
-
-        # 繁體中文自動轉換切換勾選框
-        self.chk_traditional = ttk.Checkbutton(
-            toolbar, text="強制轉繁體中文", variable=self.var_traditional, command=self._on_toggle_traditional
-        )
-        self.chk_traditional.pack(side=tk.LEFT, padx=6)
-
-        # 主工作區 (左右分割：左側預覽縮圖，右側文字編輯區)
-        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
-
-        # 左側縮圖預覽框架
-        left_frame = ttk.LabelFrame(paned, text=" 截圖預覽 ", padding=6)
-        paned.add(left_frame, weight=1)
-
-        self.preview_label = ttk.Label(left_frame, text="點擊「開始框選」以擷取圖片", anchor="center")
-        self.preview_label.pack(fill=tk.BOTH, expand=True)
-
-        # 右側文字編輯框架
-        right_frame = ttk.LabelFrame(paned, text=" 辨識結果 (繁體中文編輯區) ", padding=6)
-        paned.add(right_frame, weight=2)
+        result_actions = ttk.Frame(right_frame)
+        result_actions.pack(fill=tk.X, pady=(0, 8))
+        self.btn_copy = ttk.Button(result_actions, text="複製文字", width=0, command=self.copy_text)
+        self.btn_save_txt = ttk.Button(result_actions, text="另存 TXT", width=0, command=self.save_as_txt)
+        self.btn_save_odt = ttk.Button(result_actions, text="另存 ODT", width=0, command=self.save_as_odt)
+        self.btn_clear = ttk.Button(result_actions, text="清空", width=0, command=self.clear_all)
+        for index, button in enumerate((self.btn_copy, self.btn_save_txt, self.btn_save_odt, self.btn_clear)):
+            result_actions.columnconfigure(index, weight=1, uniform="result")
+            button.grid(row=0, column=index, sticky="ew", padx=(0, 6))
+        result_actions.update_idletasks()
+        paned.add(right_frame, minsize=result_actions.winfo_reqwidth() + 8, stretch="always")
 
         self.text_editor = scrolledtext.ScrolledText(
-            right_frame, wrap=tk.WORD, font=("Microsoft JhengHei UI", 11), undo=True
+            right_frame, width=24, height=6, wrap=tk.WORD, font=(FONT, 12), undo=True,
+            background=SURFACE, foreground=INK, insertbackground=INK,
+            selectbackground=SELECTED, selectforeground=INK, padx=12, pady=10,
+            relief=tk.FLAT, highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT,
         )
         self.text_editor.pack(fill=tk.BOTH, expand=True)
-
-        # 底部狀態列
-        status_bar = ttk.Frame(self.root, padding=(8, 4))
-        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.lbl_status = ttk.Label(status_bar, text="正在初始化 OCR 引擎...", anchor="w")
-        self.lbl_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        self.lbl_count = ttk.Label(status_bar, text="字數: 0", anchor="e")
-        self.lbl_count.pack(side=tk.RIGHT)
-
-        # 監聽文字變更以更新字數
         self.text_editor.bind("<<Modified>>", self._on_text_modified)
+        self._update_result_controls()
 
     def _on_toggle_traditional(self):
         """當使用者切換繁體中文勾選時，立即將目前編輯區的文字做相應轉換"""
@@ -305,12 +323,24 @@ class SnippingOCRApp:
 
     def _on_text_modified(self, event=None):
         if self.text_editor.edit_modified():
-            content = self.text_editor.get("1.0", tk.END).strip()
-            self.lbl_count.config(text=f"字數: {len(content)}")
+            self._update_result_controls()
             self.text_editor.edit_modified(False)
+
+    def _update_result_controls(self):
+        content = self.text_editor.get("1.0", "end-1c")
+        count = len(content.strip())
+        self.lbl_count.config(text=f"{count} 字")
+        for button in (self.btn_copy, self.btn_save_txt, self.btn_save_odt):
+            button.state(["!disabled" if count else "disabled"])
+        can_clear = (content or self.current_image is not None) and not self.btn_snip.instate(["disabled"])
+        self.btn_clear.state(["!disabled" if can_clear else "disabled"])
 
     def start_snipping(self):
         """隱藏主視窗並啟動全螢幕截圖模式"""
+        if self.btn_snip.instate(["disabled"]):
+            return
+        self.btn_snip.config(state=tk.DISABLED)
+        self._update_result_controls()
         self.set_status("請在螢幕上按住滑鼠左鍵並拖曳框選區域...")
         self.root.withdraw()
         # 延遲 250ms 等待主視窗完全隱藏，確保截圖乾淨
@@ -323,24 +353,31 @@ class SnippingOCRApp:
         """截圖結束回呼函式"""
         self.root.deiconify()
         if cropped_image is None:
+            self.btn_snip.config(state=tk.NORMAL)
+            self._update_result_controls()
             self.set_status("已取消截圖")
             return
 
         self.current_image = cropped_image
-        self._update_preview(cropped_image)
+        self._update_preview()
 
         # 啟動非同步 OCR 辨識
         self.set_status("⏳ 正在辨識文字中，請稍候...")
-        self.btn_snip.config(state=tk.DISABLED)
         threading.Thread(target=self._run_ocr_worker, args=(cropped_image,), daemon=True).start()
 
-    def _update_preview(self, image: Image.Image):
-        """更新左側預覽縮圖"""
-        max_w, max_h = 320, 450
-        img_copy = image.copy()
-        img_copy.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+    def _update_preview(self, event=None):
+        """依照預覽區的可用空間顯示截圖。"""
+        canvas = self.preview_canvas
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        canvas.delete("all")
+        if self.current_image is None:
+            canvas.create_text(width / 2, height / 2, text="完成框選後會在此顯示截圖。",
+                               fill=MUTED, font=(FONT, 10), width=max(1, width - 24), justify=tk.CENTER)
+            return
+        img_copy = self.current_image.copy()
+        img_copy.thumbnail((max(1, width - 24), max(1, height - 24)), Image.Resampling.LANCZOS)
         self.preview_tk = ImageTk.PhotoImage(img_copy)
-        self.preview_label.config(image=self.preview_tk, text="")
+        canvas.create_image(width / 2, height / 2, image=self.preview_tk)
 
     def _run_ocr_worker(self, image: Image.Image):
         """在背景執行緒中進行 OCR 辨識"""
@@ -373,6 +410,7 @@ class SnippingOCRApp:
     def _on_ocr_finished(self, text: str, error: str = None):
         """OCR 完成後更新介面"""
         self.btn_snip.config(state=tk.NORMAL)
+        self._update_result_controls()
         if error:
             messagebox.showerror("OCR 辨識錯誤", f"辨識時發生錯誤:\n{error}")
             self.set_status("辨識失敗")
@@ -450,9 +488,10 @@ class SnippingOCRApp:
     def clear_all(self):
         """清空預覽與文字"""
         self.text_editor.delete("1.0", tk.END)
-        self.preview_label.config(image="", text="點擊「開始框選」以擷取圖片")
         self.preview_tk = None
         self.current_image = None
+        self._update_preview()
+        self._update_result_controls()
         self.set_status("已清空內容")
 
 

@@ -3,7 +3,9 @@
 use std::{path::PathBuf, sync::mpsc, thread, time::Duration};
 
 use anyhow::Result;
-use eframe::egui::{self, FontData, FontDefinitions, FontFamily, ViewportCommand};
+use eframe::egui::{
+    self, Color32, FontData, FontDefinitions, FontFamily, RichText, Stroke, ViewportCommand, vec2,
+};
 use image::{DynamicImage, RgbImage};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use rfd::FileDialog;
@@ -27,6 +29,45 @@ enum State {
     Recognizing,
 }
 
+const ACCENT: Color32 = Color32::from_rgb(29, 78, 216);
+const INK: Color32 = Color32::from_rgb(30, 41, 59);
+const MUTED: Color32 = Color32::from_rgb(71, 85, 105);
+const BORDER: Color32 = Color32::from_rgb(203, 213, 225);
+const BACKGROUND: Color32 = Color32::from_rgb(241, 245, 249);
+
+fn light_style(ctx: &egui::Context) {
+    ctx.set_theme(egui::Theme::Light);
+    ctx.style_mut(|style| {
+        style.spacing.item_spacing = vec2(8.0, 8.0);
+        style.spacing.button_padding = vec2(12.0, 6.0);
+        style.spacing.interact_size.y = 38.0;
+        for text_style in [egui::TextStyle::Body, egui::TextStyle::Button] {
+            style
+                .text_styles
+                .insert(text_style, egui::FontId::proportional(15.0));
+        }
+        let mut visuals = egui::Visuals::light();
+        visuals.panel_fill = BACKGROUND;
+        visuals.extreme_bg_color = Color32::WHITE;
+        visuals.widgets.noninteractive.fg_stroke.color = INK;
+        visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, BORDER);
+        visuals.widgets.inactive.fg_stroke.color = INK;
+        visuals.widgets.inactive.weak_bg_fill = Color32::WHITE;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, BORDER);
+        visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(239, 246, 255);
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
+        visuals.selection.bg_fill = Color32::from_rgb(219, 234, 254);
+        visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT);
+        style.visuals = visuals;
+    });
+}
+
+fn section_frame(fill: Color32, vertical_margin: i8) -> egui::Frame {
+    egui::Frame::new()
+        .fill(fill)
+        .inner_margin(egui::Margin::symmetric(20, vertical_margin))
+}
+
 struct App {
     events: mpsc::Receiver<Event>,
     notify: mpsc::Sender<Event>,
@@ -40,6 +81,7 @@ struct App {
 
 impl App {
     fn new(ctx: &egui::Context) -> Self {
+        light_style(ctx);
         if let Ok(font) = std::fs::read(r"C:\Windows\Fonts\msjh.ttc") {
             let mut fonts = FontDefinitions::default();
             fonts
@@ -200,6 +242,10 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {
+        BACKGROUND.to_normalized_gamma_f32()
+    }
+
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.update_events(ctx);
         // Keep polling while hidden because a hidden winit window may defer redraws.
@@ -211,84 +257,125 @@ impl eframe::App for App {
                 || i.consume_key(egui::Modifiers::CTRL, egui::Key::N)
         });
 
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                let snip = ui.add_enabled(
-                    self.state == State::Idle,
-                    egui::Button::new("開始框選 (F2)"),
+        egui::TopBottomPanel::top("toolbar")
+            .min_height(144.0)
+            .frame(section_frame(Color32::WHITE, 16))
+            .show(ctx, |ui| {
+                ui.label(RichText::new("螢幕剪取與文字辨識").size(27.0).strong());
+                ui.label(
+                    RichText::new("拖曳框選畫面上的文字，再編輯、複製或儲存辨識結果。")
+                        .color(MUTED),
                 );
-                if self.state == State::Idle && (snip.clicked() || hotkey) {
-                    self.start_capture(ctx, frame);
-                }
-                let has_text = !self.text.trim().is_empty();
-                for (label, ext) in [("另存 TXT", "txt"), ("另存 ODT", "odt")] {
-                    if ui.add_enabled(has_text, egui::Button::new(label)).clicked() {
-                        self.save(ext);
+                ui.horizontal_wrapped(|ui| {
+                    let start = egui::Button::new(
+                        RichText::new("開始框選  (F2)")
+                            .strong()
+                            .color(Color32::WHITE),
+                    )
+                    .fill(ACCENT)
+                    .stroke(Stroke::NONE)
+                    .min_size(vec2(152.0, 44.0));
+                    let snip = ui.add_enabled(self.state == State::Idle, start);
+                    if self.state == State::Idle && (snip.clicked() || hotkey) {
+                        self.start_capture(ctx, frame);
                     }
-                }
-                if ui
-                    .add_enabled(has_text, egui::Button::new("複製文字"))
-                    .clicked()
-                {
-                    ctx.copy_text(self.text.trim().to_owned());
-                    self.status = "已複製到剪貼簿".into();
-                }
-                if ui
-                    .add_enabled(self.state == State::Idle, egui::Button::new("清空內容"))
-                    .clicked()
-                {
-                    self.text.clear();
-                    self.preview = None;
-                    self.status = "已清空內容".into();
-                }
-                if ui
-                    .checkbox(&mut self.force_traditional, "強制轉繁體中文")
-                    .changed()
-                    && self.force_traditional
-                    && has_text
-                {
-                    self.text = traditional(&self.text);
-                    self.status = "已將目前文字轉成繁體中文".into();
-                }
+                    if ui
+                        .checkbox(&mut self.force_traditional, "自動轉為繁體中文")
+                        .changed()
+                        && self.force_traditional
+                        && !self.text.trim().is_empty()
+                    {
+                        self.text = traditional(&self.text);
+                        self.status = "已將目前文字轉成繁體中文".into();
+                    }
+                });
             });
-        });
 
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(format!("字數 {}", self.text.trim().chars().count()));
-                ui.separator();
-                if self.state == State::Recognizing {
-                    ui.spinner();
-                }
-                ui.label(&self.status);
+        egui::TopBottomPanel::bottom("status")
+            .exact_height(54.0)
+            .frame(section_frame(Color32::WHITE, 8))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if self.state == State::Recognizing {
+                        ui.spinner();
+                    }
+                    ui.add(egui::Label::new(RichText::new(&self.status).color(MUTED)).truncate())
+                        .on_hover_text(&self.status);
+                });
             });
-        });
 
         egui::SidePanel::left("preview")
+            .frame(section_frame(BACKGROUND, 16))
             .resizable(true)
-            .default_width(285.0)
+            .default_width(300.0)
+            .width_range(230.0..=340.0)
             .show(ctx, |ui| {
-                ui.heading("截圖預覽");
-                ui.separator();
-                if let Some(preview) = &self.preview {
-                    ui.add(egui::Image::from_texture(preview).max_size(ui.available_size()));
-                } else {
-                    ui.label("點擊「開始框選」以擷取圖片。");
-                }
+                ui.label(RichText::new("截圖預覽").size(18.0).strong());
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .stroke(Stroke::new(1.0_f32, BORDER))
+                    .corner_radius(8)
+                    .inner_margin(12)
+                    .show(ui, |ui| {
+                        let size = ui.available_size();
+                        ui.centered_and_justified(|ui| {
+                            if let Some(preview) = &self.preview {
+                                ui.add(egui::Image::from_texture(preview).max_size(size));
+                            } else {
+                                ui.label(RichText::new("完成框選後會在此顯示截圖。").color(MUTED));
+                            }
+                        });
+                    });
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("辨識結果");
-            ui.separator();
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_sized(
-                    ui.available_size(),
-                    egui::TextEdit::multiline(&mut self.text)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("辨識後可在此編輯文字"),
-                );
+        egui::CentralPanel::default()
+            .frame(section_frame(BACKGROUND, 16))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("辨識結果").size(18.0).strong());
+                    ui.label(
+                        RichText::new(format!("{} 字", self.text.trim().chars().count()))
+                            .color(MUTED),
+                    );
+                });
+                ui.horizontal_wrapped(|ui| {
+                    let has_text = !self.text.trim().is_empty();
+                    if ui
+                        .add_enabled(has_text, egui::Button::new("複製文字"))
+                        .clicked()
+                    {
+                        ctx.copy_text(self.text.trim().to_owned());
+                        self.status = "已複製到剪貼簿".into();
+                    }
+                    for (label, ext) in [("另存 TXT", "txt"), ("另存 ODT", "odt")] {
+                        if ui.add_enabled(has_text, egui::Button::new(label)).clicked() {
+                            self.save(ext);
+                        }
+                    }
+                    let can_clear = self.state == State::Idle
+                        && (!self.text.is_empty() || self.preview.is_some());
+                    if ui
+                        .add_enabled(can_clear, egui::Button::new("清空"))
+                        .clicked()
+                    {
+                        self.text.clear();
+                        self.preview = None;
+                        self.status = "已清空內容".into();
+                    }
+                });
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.add_sized(
+                            ui.available_size(),
+                            egui::TextEdit::multiline(&mut self.text)
+                                .desired_width(f32::INFINITY)
+                                .font(egui::FontId::proportional(16.0))
+                                .margin(egui::Margin::same(12))
+                                .hint_text("辨識完成後，可在這裡編輯或複製文字。"),
+                        );
+                    });
             });
-        });
     }
 }
 
@@ -300,8 +387,8 @@ fn main() -> eframe::Result {
         "剪取與 OCR 辨識工具",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([900.0, 640.0])
-                .with_min_inner_size([720.0, 500.0]),
+                .with_inner_size([940.0, 660.0])
+                .with_min_inner_size([760.0, 510.0]),
             ..Default::default()
         },
         Box::new(|cc| Ok(Box::new(App::new(&cc.egui_ctx)))),
